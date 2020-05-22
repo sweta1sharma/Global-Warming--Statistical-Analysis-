@@ -1,0 +1,146 @@
+---
+title: "Climate Change Analysis using R"
+author: "Rahul Sinha, Sweta Sharma"
+date: 2019-12-10
+output:
+  html_document:
+    toc: yes
+  pdf_document:
+    toc: yes
+---
+
+```{r}
+# Read the dataset
+climate = read.csv("./Data/climate_change.csv")
+```
+
+```{r}
+# Summarize the data
+str(climate)
+summary(climate)
+cat("Number of missing values in dataset: ", sum(is.na(climate)))
+```
+
+```{r}
+# A look at all the correlations in the dataset
+pairs(climate, panel=panel.smooth)
+```
+
+
+```{r}
+hist(climate$MEI)
+hist(climate$CO2)
+hist(climate$CH4)
+hist(climate$N2O)
+hist(climate$CFC.11)
+hist(climate$CFC.12)
+hist(climate$TSI)
+hist(climate$Aerosols)
+```
+
+```{r}
+par(mfrow=c(1,1))
+library(tree)
+model <- tree(climate$Temp~., data=climate)
+plot(model)
+text(model)
+```
+
+
+```{r}
+# Split the data into training and testing sets
+# Training set <- data till 2005, Testing set <- data from 2006 to 2008
+train_data = subset(climate, Year <= 2005)
+test_data = subset(climate, Year > 2005)
+```
+
+```{r}
+# Create a linear model
+LinearModel = lm(Temp ~ MEI + CO2 + CH4 + N2O + CFC.11 + CFC.12 + TSI + Aerosols, data=train_data)
+```
+
+```{r}
+# we get a R-squared value of 0.7415
+summary(LinearModel)
+```
+
+
+
+
+```{r}
+# test if residuals are normally distributed: Pass
+shapiro.test(residuals(LinearModel))
+
+# test for Homoscedasticity: Pass
+library(lmtest)
+bptest(LinearModel)
+
+# we are not checking auto-correlation and multicollinearity
+```
+
+```{r}
+plot(LinearModel)
+```
+
+
+
+
+
+```{r}
+# explain -ve correlations of N20 and CFC.11
+# could be correlated with other vars
+# Get the correlation matrix
+# Observe that N2O is correlated with CO2, CH4, and CFC.12
+# CFC.11 is correlated with CH4 and CFC.12
+# Additionally, there is significant correlation b/w CO2, CH4, N2O, and CFC.12
+corMatrix <- cor(train_data)
+corrplot::corrplot(corMatrix)
+```
+
+
+```{r}
+# As CO2, CH4, N2O, and CFC.12 are correlated we may try building a model with MEI, TSI, Aerosols, and one of the correlated variables, say CH4 (CO2, CH4, N2O, and CFC.12)
+
+simpler_LinearModel = lm(Temp ~ MEI  + TSI + Aerosols + CH4, data=train_data)
+summary(simpler_LinearModel)
+
+# R-squared value for "simpler_LinearModel" = 0.6395
+# R-squared value of "LinearModel" = 0.7415
+# We note that even though we removed 4 independent variables from the "LinearModel" model, the R-squared value of fell only slightly to 0.6395 and the new model retained predictive power of the old model. This is expected as the removed variables were highly correlated as shown before. 
+```
+
+```{r}
+# Step function to build a linear model
+# CH4 is removed, but the correlated vars aren't removed
+# Step only provides the best model based on AIC
+# R-squared same for step_LinearModel and LinearModel,
+# but Adjusted R-squared increases from 0.7337 to 0.7346
+step_LinearModel <- step(LinearModel)
+summary(step_LinearModel)
+```
+
+```{r}
+# Test our step model on the Test data
+# Predict the Target var - Temp - for the Test data
+tempPredicted = predict(step_LinearModel, newdata = test_data)
+SSE = sum((tempPredicted - test_data$Temp)^2)
+SST = sum((test_data$Temp - mean(train_data$Temp))^2) # expecting the temp to be the average of the temperature for the training data
+rSquared = 1 - SSE/SST
+rSquared
+```
+
+```{r}
+# test if residuals are normally distributed: Pass
+shapiro.test(residuals(step_LinearModel))
+
+# test for Homoscedasticity: Pass
+library(lmtest)
+bptest(step_LinearModel)
+```
+
+
+```{r}
+plot(step_LinearModel)
+```
+
+
